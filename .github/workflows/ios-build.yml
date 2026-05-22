@@ -1,0 +1,57 @@
+name: Build iOS Unsigned IPA
+
+# 触发条件：允许在 Actions 页面手动点击运行
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # 必须使用 macOS 环境
+    runs-on: macos-latest
+
+    steps:
+      # 1. 拉取当前分支的代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. 配置 Flutter 环境
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 3. 配置 Rust 环境（VntApp 核心依赖）
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # 必须添加 iOS 的编译目标，否则 Rust 无法编译为 iOS 库
+          targets: aarch64-apple-ios, x86_64-apple-ios
+
+      # 4. 安装 Flutter-Rust 桥接代码生成工具
+      - name: Install Rust Bridge
+        run: cargo install flutter_rust_bridge_codegen
+
+      # 5. 获取 Flutter 依赖
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 6. 编译无签名的 iOS App
+      - name: Build Unsigned iOS App
+        run: flutter build ios --release --no-codesign
+
+      # 7. 将编译出的 .app 文件打包为 .ipa
+      - name: Package to IPA
+        run: |
+          mkdir -p Payload
+          # 将生成的 Runner.app 移动到 Payload 文件夹中
+          mv build/ios/iphoneos/Runner.app Payload/
+          # 压缩为 ipa 文件 (使用 -qq 隐藏多余的压缩日志)
+          zip -qq -r VntApp-iOS.ipa Payload
+
+      # 8. 上传打包好的 .ipa 文件供下载
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VntApp-IPA
+          path: VntApp-iOS.ipa
