@@ -52,7 +52,7 @@ jobs:
           echo -n "$P12_BASE64" | base64 --decode -o $CERT_PATH
           echo -n "$PROVISION_BASE64" | base64 --decode -o $PP_PATH
 
-          # 创建临时钥匙串并解锁 (供 Xcode 编译时调用)
+          # 创建临时钥匙串解锁 (供 Xcode 编译时调用)
           security create-keychain -p "actions" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "actions" $KEYCHAIN_PATH
