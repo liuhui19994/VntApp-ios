@@ -1,4 +1,4 @@
-name: Build iOS Unsigned IPA
+name: Build iOS Signed IPA
 
 # 触发条件：允许在 Actions 页面手动点击运行
 on:
@@ -36,11 +36,43 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      # 6. 编译无签名的 iOS App
-      - name: Build Unsigned iOS App
-        run: flutter build ios --release --no-codesign
+      # 6. 安装 Apple 证书与描述文件 (核心新增步骤)
+      - name: Install Apple Certificate and Provisioning Profile
+        env:
+          P12_BASE64: ${{ secrets.P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          PROVISION_BASE64: ${{ secrets.PROFILE_BASE64 }}
+        run: |
+          # 创建临时文件路径
+          CERT_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/profile.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-      # 7. 将编译出的 .app 文件打包为 .ipa
+          # 从 Base64 解码出真实的证书和描述文件
+          echo -n "$P12_BASE64" | base64 --decode -o $CERT_PATH
+          echo -n "$PROVISION_BASE64" | base64 --decode -o $PP_PATH
+
+          # 创建临时钥匙串并解锁 (供 Xcode 编译时调用)
+          security create-keychain -p "actions" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "actions" $KEYCHAIN_PATH
+
+          # 导入 p12 证书并放行权限
+          security import $CERT_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          
+          # 关键：解除系统拦截，允许无 UI 状态下命令行使用私钥签名
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "actions" $KEYCHAIN_PATH
+
+          # 将描述文件放入 Xcode 默认读取的系统目录
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      # 7. 编译原生的 iOS App（去掉了 --no-codesign，让系统执行原生签名）
+      - name: Build Signed iOS App
+        run: flutter build ios --release
+
+      # 8. 将编译出的带签名的 .app 文件打包为 .ipa
       - name: Package to IPA
         run: |
           mkdir -p Payload
@@ -49,7 +81,7 @@ jobs:
           # 压缩为 ipa 文件 (使用 -qq 隐藏多余的压缩日志)
           zip -qq -r VntApp-iOS.ipa Payload
 
-      # 8. 上传打包好的 .ipa 文件供下载
+      # 9. 上传打包好的 .ipa 文件供下载
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
