@@ -49,8 +49,8 @@ jobs:
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
           # 从 Base64 解码出真实的证书和描述文件
-          echo -n "$P12_BASE64" | base64 --decode -o $CERT_PATH
-          echo -n "$PROVISION_BASE64" | base64 --decode -o $PP_PATH
+          echo "$P12_BASE64" | tr -d '\n\r ' | base64 --decode -o $CERT_PATH
+          echo "$PROVISION_BASE64" | tr -d '\n\r ' | base64 --decode -o $PP_PATH
 
           # 创建临时钥匙串解锁 (供 Xcode 编译时调用)
           security create-keychain -p "actions" $KEYCHAIN_PATH
